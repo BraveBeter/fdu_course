@@ -1,0 +1,13 @@
+import { mkdir } from 'node:fs/promises';
+import { readConfig } from './config.js';
+import { openDatabase, migrate } from './database/database.js';
+import { buildApp } from './app.js';
+const config = readConfig();
+if (config.DATABASE_URL.startsWith('pglite:.local/')) await mkdir('.local', { recursive: true });
+const db = await openDatabase(config.DATABASE_URL);
+await migrate(db);
+const app = await buildApp(db, config);
+app.addHook('onClose', () => db.close());
+await app.listen({ host: config.HOST, port: config.PORT });
+console.log(`API ready on ${config.HOST}:${config.PORT}`);
+for (const signal of ['SIGINT', 'SIGTERM']) process.on(signal, () => void app.close());
