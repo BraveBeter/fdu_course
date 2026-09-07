@@ -1,4 +1,4 @@
-import { chromium } from '@playwright/test';
+import { chromium } from 'playwright';
 import { readIdentity, readSelectedCourses, schoolEntry, SchoolQueryError } from './school-page.js';
 import type { CourseSnapshot } from '../shared/course.js';
 

@@ -1,4 +1,4 @@
-import type { Page } from '@playwright/test';
+import type { Page } from 'playwright';
 import type { RawCourse, CourseSnapshot } from '../shared/course.js';
 import { parseSnapshot } from '../shared/import-parser.js';
 

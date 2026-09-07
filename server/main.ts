@@ -1,3 +1,4 @@
+import { seedDemo } from './demo.js';
 import { mkdir } from 'node:fs/promises';
 import { readConfig } from './config.js';
 import { openDatabase, migrate } from './database/database.js';
@@ -6,6 +7,7 @@ const config = readConfig();
 if (config.DATABASE_URL.startsWith('pglite:.local/')) await mkdir('.local', { recursive: true });
 const db = await openDatabase(config.DATABASE_URL);
 await migrate(db);
+if (config.DEMO_MODE === 'true') await seedDemo(db, config);
 const app = await buildApp(db, config);
 app.addHook('onClose', () => db.close());
 await app.listen({ host: config.HOST, port: config.PORT });

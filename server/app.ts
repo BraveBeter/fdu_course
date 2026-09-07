@@ -1,3 +1,5 @@
+import { attendanceRoutes } from './attendance-routes.js';
+import { demoStudent, demoAdmin, demoConfig, demoSnapshot } from './demo.js';
 import Fastify, { type FastifyRequest } from 'fastify';
 import cookie from '@fastify/cookie';
 import rateLimit from '@fastify/rate-limit';
@@ -5,10 +7,10 @@ import { randomBytes } from 'node:crypto';
 import { z, ZodError } from 'zod';
 import type { Config } from './config.js';
 import type { Database } from './database/database.js';
-import { getViewer, tokenHash } from './accounts.js';
+import { getViewer, tokenHash, ensureAccount, createSession } from './accounts.js';
 import { AppError } from './errors.js';
 import { listOfferings, classmates } from './catalog.js';
-import { previewImport, commitImport } from './imports.js';
+import { previewImport, commitImport, createImport } from './imports.js';
 import { createAuthJobs, schoolClient, type SchoolLogin } from './auth-jobs.js';
 
 export async function buildApp(
@@ -60,11 +62,9 @@ export async function buildApp(
       typeof error.statusCode === 'number' &&
       error.statusCode < 500
     )
-      return reply
-        .code(error.statusCode)
-        .send({
-          message: error.statusCode === 429 ? '操作过于频繁，请稍后重试' : '请求格式不正确',
-        });
+      return reply.code(error.statusCode).send({
+        message: error.statusCode === 429 ? '操作过于频繁，请稍后重试' : '请求格式不正确',
+      });
     // Do not serialize exception objects: upstream errors may contain credentials or query data.
     console.error(
       JSON.stringify({
@@ -173,5 +173,23 @@ export async function buildApp(
     await db.query('DELETE FROM enrollments WHERE user_id=$1 AND offering_id=$2', [user.id, id]);
     return { ok: true };
   });
+  attendanceRoutes(app, db, viewer);
+  if (config.DEMO_MODE === 'true' && config.NODE_ENV !== 'production') {
+    app.post('/api/auth/demo', async (request, reply) => {
+      const { role } = z.object({ role: z.enum(['student', 'admin']) }).parse(request.body);
+      const user = await ensureAccount(
+        db,
+        role === 'admin' ? demoAdmin : demoStudent,
+        demoConfig(config),
+      );
+      const session = await createSession(db, user.id);
+      reply.setCookie('session', session, { ...cookieOptions, maxAge: 604800 });
+      return { user };
+    });
+    app.post('/api/demo/preview', async (request) => {
+      const user = await viewer(request);
+      return { id: await createImport(db, user.id, demoSnapshot(config.CURRENT_TERM)) };
+    });
+  }
   return app;
 }
