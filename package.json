@@ -4,20 +4,22 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "concurrently -k -n api,web 'tsx watch server/main.ts' 'vite --host 127.0.0.1'",
-    "dev:connector": "tsx connector/main.ts",
+    "dev": "concurrently -k -n api,web 'node --env-file-if-exists=.env --import tsx --watch server/main.ts' 'vite --host 127.0.0.1'",
+    "dev:connector": "node --env-file-if-exists=.env --import tsx connector/main.ts",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "test:e2e": "playwright test",
-    "build": "vite build && tsc -p tsconfig.server.json && node scripts/copy-migrations.mjs",
+    "build": "NODE_ENV=production vite build && tsc -p tsconfig.server.json && node scripts/copy-migrations.mjs",
     "check": "npm run typecheck && npm test && npm run build",
     "start": "node dist/server/server/main.js",
     "start:connector": "node dist/server/connector/main.js",
-    "db:migrate": "tsx server/database/migrate.ts",
+    "db:migrate": "node --env-file-if-exists=.env --import tsx server/database/migrate.ts",
     "db:backup": "bash scripts/backup.sh",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
-    "dev:test": "concurrently -k -n api,web 'node --import tsx server/main.ts' 'vite --host 127.0.0.1 --port 5174'"
+    "dev:test": "concurrently -k -n api,web 'node --import tsx server/main.ts' 'vite --host 127.0.0.1 --port 5174'",
+    "setup:local": "node scripts/setup-local.mjs",
+    "dev:demo": "concurrently -k -n api,web 'node --import tsx scripts/demo-server.ts' 'vite --host 127.0.0.1'"
   },
   "engines": {
     "node": ">=22.12.0"
@@ -29,14 +31,12 @@
     "@fastify/static": "^10.1.3",
     "@radix-ui/react-checkbox": "^1.3.11",
     "@radix-ui/react-dialog": "^1.1.23",
-    "clsx": "^2.1.1",
     "fastify": "^5.12.3",
     "lucide-react": "^1.42.0",
     "pg": "^8.23.0",
     "playwright": "^1.63.0",
     "react": "^19.2.8",
     "react-dom": "^19.2.8",
-    "tailwind-merge": "^3.6.0",
     "zod": "^4.5.4"
   },
   "devDependencies": {

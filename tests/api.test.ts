@@ -1,6 +1,7 @@
+import { openTestDatabase } from './support/database.js';
 import { beforeEach, afterEach, expect, it, vi } from 'vitest';
 import { buildApp } from '../server/app.js';
-import { openDatabase, migrate, type Database } from '../server/database/database.js';
+import { migrate, type Database } from '../server/database/database.js';
 import { ensureAccount, createSession } from '../server/accounts.js';
 import { readConfig } from '../server/config.js';
 let db: Database;
@@ -8,7 +9,7 @@ let app: Awaited<ReturnType<typeof buildApp>>;
 const origin = 'http://127.0.0.1:5173';
 const headers = { origin, 'x-requested-with': 'fdu-course' };
 beforeEach(async () => {
-  db = await openDatabase('pglite:');
+  db = await openTestDatabase();
   await migrate(db);
   app = await buildApp(
     db,
@@ -97,6 +98,22 @@ it('昵称只修改当前用户，过期会话不能修改', async () => {
     ).statusCode,
   ).toBe(401);
 });
-it('生产配置拒绝演示登录与开发密钥', () => {
-  expect(() => readConfig({ NODE_ENV: 'production', DEMO_MODE: 'true' })).toThrow();
+it('生产配置逐项拒绝不安全配置，演示环境不能连接真实 UIS', () => {
+  const production = {
+    NODE_ENV: 'production',
+    IDENTITY_SECRET: 'test-only-production-config-validation-secret',
+    DATABASE_URL: 'postgresql://localhost/test',
+    PUBLIC_ORIGIN: 'https://courses.example.test',
+  };
+  expect(() => readConfig(production)).not.toThrow();
+  for (const invalid of [
+    { DEMO_MODE: 'true' },
+    { IDENTITY_SECRET: 'local-development-only-do-not-use-in-production' },
+    { DATABASE_URL: 'pglite:' },
+    { PUBLIC_ORIGIN: origin },
+  ])
+    expect(() => readConfig({ ...production, ...invalid })).toThrow();
+  expect(() => readConfig({ NODE_ENV: 'test', DEMO_MODE: 'true', UIS_ENABLED: 'true' })).toThrow(
+    '演示环境不能同时连接真实 UIS',
+  );
 });

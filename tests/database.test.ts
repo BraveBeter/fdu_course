@@ -1,5 +1,6 @@
+import { openTestDatabase } from './support/database.js';
 import { beforeEach, afterEach, describe, expect, it } from 'vitest';
-import { openDatabase, migrate, type Database } from '../server/database/database.js';
+import { migrate, type Database } from '../server/database/database.js';
 import { ensureAccount } from '../server/accounts.js';
 import { readConfig } from '../server/config.js';
 import { createImport, previewImport, commitImport } from '../server/imports.js';
@@ -40,7 +41,7 @@ let db: Database;
 let a: Viewer;
 let b: Viewer;
 beforeEach(async () => {
-  db = await openDatabase('pglite:');
+  db = await openTestDatabase();
   await migrate(db);
   const config = readConfig({ NODE_ENV: 'test' });
   a = await ensureAccount(db, '99990000001', config);
@@ -70,13 +71,32 @@ describe('PostgreSQL 导入与权限', () => {
     expect(offerings[0]?.count).toBe(2);
   });
   it('同名不同班、跨学期分别保存', async () => {
-    await imported(a, [
-      course,
-      { ...course, section: '2026202701TEST60001.02' },
-      { ...course, term: '2027-2028学年 第一学期', section: '2027202801TEST60001.01' },
-    ]);
+    await imported(a, [course, { ...course, section: '2026202701TEST60001.02' }]);
+    const nextTerm = '2027-2028学年 第一学期';
+    const next = { ...course, term: nextTerm, section: '2027202801TEST60001.01' };
+    const id = await createImport(db, a.id, { ...snapshot([next]), term: nextTerm });
+    await commitImport(db, a.id, id, true);
     expect(await listOfferings(db, term)).toHaveLength(2);
-    expect(await listOfferings(db, '2027-2028学年 第一学期')).toHaveLength(1);
+    expect((await listOfferings(db, term)).every((item) => item.count === 1)).toBe(true);
+    expect(await listOfferings(db, nextTerm)).toHaveLength(1);
+  });
+  it('拒绝混合学期的导入，已有登记保持不变', async () => {
+    await imported();
+    await expect(
+      createImport(db, a.id, snapshot([{ ...course, term: '2027-2028学年 第一学期' }])),
+    ).rejects.toMatchObject({ status: 422 });
+    expect((await listOfferings(db, term))[0]?.count).toBe(1);
+  });
+  it('不同顺序的并发导入不会死锁或漏计人数', async () => {
+    const courses = Array.from({ length: 8 }, (_, index) => ({
+      ...course,
+      code: `TEST${index}`,
+      section: `2026202701TEST${index}.01`,
+    }));
+    await Promise.all([imported(a, courses), imported(b, [...courses].reverse())]);
+    const offerings = await listOfferings(db, term);
+    expect(offerings).toHaveLength(8);
+    expect(offerings.every((item) => item.count === 2)).toBe(true);
   });
   it('不完整查询不能取消登记；完整快照可以明确同步取消', async () => {
     await imported();

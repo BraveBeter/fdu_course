@@ -16,6 +16,8 @@ const schema = z.object({
 export type Config = z.infer<typeof schema>;
 export function readConfig(env: NodeJS.ProcessEnv = process.env): Config {
   const config = schema.parse(env);
+  if (config.DEMO_MODE === 'true' && config.UIS_ENABLED === 'true')
+    throw new Error('演示环境不能同时连接真实 UIS');
   if (config.NODE_ENV === 'production') {
     if (
       config.IDENTITY_SECRET.startsWith('local-') ||

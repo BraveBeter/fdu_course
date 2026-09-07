@@ -43,6 +43,8 @@ export async function createImport(
   userId: string,
   snapshot: CourseSnapshot,
 ): Promise<string> {
+  if (snapshot.courses.some((course) => course.term !== snapshot.term))
+    throw new AppError(422, '导入课程包含不同学期，请重新查询');
   const id = randomUUID();
   await db.query(
     'INSERT INTO imports(id,user_id,term,snapshot,expires_at) VALUES($1,$2,$3,$4,$5)',
@@ -94,7 +96,11 @@ export async function commitImport(
     if (removeMissing && !batch.snapshot.complete)
       throw new AppError(409, '课表不完整，不能取消已有登记');
     const offeringIds: string[] = [];
-    for (const course of batch.snapshot.courses) {
+    // Lock shared courses in a consistent order across simultaneous student imports.
+    const courses = [...batch.snapshot.courses].sort(
+      (a, b) => a.code.localeCompare(b.code) || a.section.localeCompare(b.section),
+    );
+    for (const course of courses) {
       await tx.query('INSERT INTO courses(code,name) VALUES($1,$2) ON CONFLICT DO NOTHING', [
         course.code,
         course.name,

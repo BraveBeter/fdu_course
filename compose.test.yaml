@@ -1,0 +1,31 @@
+name: fdu-course-test
+services:
+  db:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_DB: fdu_course_test
+      POSTGRES_USER: fdu_test
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set an ephemeral test password}
+    ports:
+      - '127.0.0.1:55432:5432'
+    healthcheck:
+      test: [CMD-SHELL, 'pg_isready -U fdu_test -d fdu_course_test']
+      interval: 2s
+      timeout: 3s
+      retries: 20
+  app:
+    build:
+      context: .
+      target: app
+    environment:
+      NODE_ENV: production
+      HOST: 0.0.0.0
+      DATABASE_URL: postgresql://fdu_test:${POSTGRES_PASSWORD}@db:5432/fdu_course_test
+      IDENTITY_SECRET: ${IDENTITY_SECRET:?Set an ephemeral identity secret}
+      PUBLIC_ORIGIN: https://courses.example.test
+      UIS_ENABLED: 'false'
+    ports:
+      - '127.0.0.1:18081:3001'
+    depends_on:
+      db:
+        condition: service_healthy

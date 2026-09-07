@@ -1,4 +1,4 @@
-import { CalendarDays, MapPin, Users, Layers3 } from 'lucide-react';
+import { CalendarDays, Layers3 } from 'lucide-react';
 import { attendanceLabels, type Offering } from '../../shared/course';
 import { layoutTimetable, type ConflictGroup } from '../../shared/timetable';
 const weekdays = ['一', '二', '三', '四', '五', '六', '日'];

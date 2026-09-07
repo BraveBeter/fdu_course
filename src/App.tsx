@@ -21,7 +21,6 @@ import {
   attendanceColors,
   attendanceLabels,
   categories,
-  type Attendance,
   type Filters,
   type Offering,
   type Viewer,

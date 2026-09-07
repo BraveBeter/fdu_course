@@ -1,4 +1,4 @@
-import { chromium } from 'playwright';
+import { runInBrowser } from './browser-session.js';
 import { readIdentity, readSelectedCourses, schoolEntry, SchoolQueryError } from './school-page.js';
 import type { CourseSnapshot } from '../shared/course.js';
 
@@ -12,25 +12,26 @@ export async function loginAndQuery(
   username: string,
   password: string,
   term: string,
+  signal: AbortSignal = AbortSignal.timeout(80000),
 ): Promise<SchoolResult> {
-  const browser = await chromium.launch({ headless: true });
-  try {
-    const context = await browser.newContext({ acceptDownloads: false });
+  return runInBrowser(signal, async (browser) => {
+    const context = await browser.newContext({ acceptDownloads: false, locale: 'zh-CN' });
     const page = await context.newPage();
     page.setDefaultTimeout(15000);
     await page.goto(schoolEntry, { waitUntil: 'domcontentloaded', timeout: 30000 });
     await page.waitForURL((url) => url.origin === 'https://id.fudan.edu.cn', { timeout: 15000 });
     const accountTab = page.getByText('账号登录', { exact: true });
     if (await accountTab.isVisible()) await accountTab.click();
-    await page
-      .getByPlaceholder(/用户名|学号|手机号\/邮箱/)
-      .first()
-      .fill(username);
+    const usernameField = page.getByPlaceholder('用户名（本人学工号）', { exact: true });
+    const submit = page.getByRole('button', { name: '登录', exact: true });
+    await submit.waitFor({ state: 'visible' });
     // Never fill credentials into a redirected or unexpected origin.
     if (new URL(page.url()).origin !== 'https://id.fudan.edu.cn')
       throw new SchoolQueryError('认证地址发生变化，已停止登录');
+    await usernameField.fill(username);
     await page.locator('input[type="password"]').first().fill(password);
-    await page.getByRole('button', { name: /^(登录|登 录|立即登录)$/ }).click();
+    password = '';
+    await submit.click();
     try {
       await page.waitForURL(
         (url) => ['yjsxk.fudan.sh.cn', 'yjsxk.fudan.edu.cn'].includes(url.hostname),
@@ -51,7 +52,5 @@ export async function loginAndQuery(
         queryError: '身份已验证，但课表读取失败。已有登记保持不变，请稍后重试。',
       };
     }
-  } finally {
-    await browser.close();
-  }
+  });
 }

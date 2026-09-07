@@ -1,5 +1,6 @@
+import { openTestDatabase } from './support/database.js';
 import { beforeEach, afterEach, it, expect } from 'vitest';
-import { openDatabase, migrate, type Database } from '../server/database/database.js';
+import { migrate, type Database } from '../server/database/database.js';
 import { readConfig } from '../server/config.js';
 import { ensureAccount } from '../server/accounts.js';
 import { createImport, commitImport } from '../server/imports.js';
@@ -14,7 +15,7 @@ let outsider: Viewer;
 let offeringId: string;
 const term = '2026-2027学年 第一学期';
 beforeEach(async () => {
-  db = await openDatabase('pglite:');
+  db = await openTestDatabase();
   await migrate(db);
   const config = readConfig({ NODE_ENV: 'test', ADMIN_UIS_IDS: '99990000002' });
   student = await ensureAccount(db, '99990000001', config);
