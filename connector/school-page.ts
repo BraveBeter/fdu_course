@@ -14,15 +14,24 @@ export async function readIdentity(page: Page): Promise<string> {
 }
 
 export async function readSelectedCourses(page: Page, term: string): Promise<CourseSnapshot> {
-  await page.getByRole('link', { name: '已选课程', exact: true }).click();
-  await page.getByText('课程名称|班级', { exact: true }).waitFor({ timeout: 15000 });
+  // The school retains hidden tables after tab switches; scope all reads and controls.
+  const grid = page.locator('#yxkcGrid');
+  const table = grid.locator('table:visible').filter({ hasText: '学年学期' });
+  const paginationPattern = /共\s*(\d+)\s*条数据[，,]\s*分\s*(\d+)\s*页/;
+  try {
+    await page.getByRole('link', { name: '已选课程', exact: true }).click();
+    await grid.waitFor({ state: 'visible', timeout: 15000 });
+    await table.getByRole('columnheader', { name: '学年学期', exact: true }).waitFor();
+    await grid.getByText(paginationPattern).waitFor({ state: 'visible', timeout: 15000 });
+  } catch {
+    throw new SchoolQueryError('已选课程表格或分页未加载完成，请稍后重新查询');
+  }
   const rows: RawCourse[] = [];
   let expected = -1;
   let pages = 0;
   const pageSignatures = new Set<string>();
   for (;;) {
-    const body = await page.locator('body').innerText();
-    const pagination = /共\s*(\d+)\s*条数据[，,]\s*分\s*(\d+)\s*页/.exec(body);
+    const pagination = paginationPattern.exec(await grid.innerText());
     if (!pagination) throw new SchoolQueryError('无法确认课表分页，未同步任何登记');
     const total = Number(pagination[1]);
     const totalPages = Number(pagination[2]);
@@ -30,7 +39,6 @@ export async function readSelectedCourses(page: Page, term: string): Promise<Cou
       throw new SchoolQueryError('读取期间课表发生变化，请重试');
     expected = total;
     if (totalPages > 50) throw new SchoolQueryError('课表页数异常，已停止查询');
-    const table = page.locator('table').filter({ hasText: '课程代码' }).first();
     const tableRows = await table
       .locator('tr')
       .evaluateAll((elements) =>
@@ -78,16 +86,21 @@ export async function readSelectedCourses(page: Page, term: string): Promise<Cou
     }
     pages++;
     if (pages >= totalPages || total === 0) break;
-    await page.getByRole('link', { name: '»', exact: true }).click();
-    await page.waitForFunction(
-      (previous) => {
-        const tables = [...document.querySelectorAll('table')];
-        const table = tables.find((item) => item.textContent?.includes('课程代码'));
-        return table && !previous.every((name) => table.textContent?.includes(name));
-      },
-      pageRows.map((row) => row[indexes[2]!]),
-      { timeout: 10000 },
-    );
+    await grid.getByRole('link', { name: '»', exact: true }).click();
+    await page
+      .waitForFunction(
+        (previous) => {
+          const tables = [...document.querySelectorAll('#yxkcGrid table')];
+          const table = tables.find((item) => item.getClientRects().length > 0);
+          const content = table?.textContent?.replace(/\s/g, '');
+          return content && !previous.every((name) => content.includes(name));
+        },
+        pageRows.map((row) => row[indexes[2]!]!.replace(/\s/g, '')),
+        { timeout: 10000 },
+      )
+      .catch(() => {
+        throw new SchoolQueryError('已选课程分页未完成切换，请重新查询');
+      });
   }
   return parseSnapshot(rows, expected, term);
 }

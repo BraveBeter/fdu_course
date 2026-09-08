@@ -1,7 +1,7 @@
 import { test, expect } from '@playwright/test';
 import { readIdentity, readSelectedCourses } from '../../connector/school-page';
 const term = '2026-2027学年 第一学期';
-function schoolPage(count: number) {
+function schoolPage(count: number, delayed = false) {
   const headers = [
     '学年学期',
     '课程代码',
@@ -37,8 +37,18 @@ function schoolPage(count: number) {
       '',
     ];
   });
-  return `<!doctype html><html lang="zh-CN"><body><p>99990000001 - 测试同学 退出</p><a href="#selected">已选课程</a><table><thead><tr>${headers.map((header) => `<th>${header}</th>`).join('')}</tr></thead><tbody></tbody></table><p>共${count}条数据，分${Math.max(1, Math.ceil(count / 20))}页显示，每页显示20条数据。</p><a href="#next" title="Go下一页">»</a><script>const rows=${JSON.stringify(rows)};let page=0;function render(){document.querySelector('tbody').innerHTML=rows.slice(page*20,(page+1)*20).map(row=>'<tr>'+row.map(cell=>'<td>'+cell+'</td>').join('')+'</tr>').join('')}render();document.querySelector('a[title]').onclick=event=>{event.preventDefault();page++;render()};</script></body></html>`;
+  const previous = delayed
+    ? '<div id="previous"><table><tr><th>课程代码</th><th>课程名称|班级</th></tr></table><p>共99条数据，分5页显示，每页显示20条数据。</p><a href="#old-next">»</a></div>'
+    : '';
+  return `<!doctype html><html lang="zh-CN"><body><p>99990000001 - 测试同学 退出</p><a href="#selected">已选课程</a>${previous}<div id="yxkcGrid" ${delayed ? 'style="display:none"' : ''}><table><thead><tr>${headers.map((header) => `<th>${header}</th>`).join('')}</tr></thead><tbody></tbody></table><p>共${count}条数据，分${Math.max(1, Math.ceil(count / 20))}页显示，每页显示20条数据。</p><a href="#next" title="Go下一页">»</a></div><script>const rows=${JSON.stringify(rows)};let page=0;function render(){document.querySelector('#yxkcGrid tbody').innerHTML=rows.slice(page*20,(page+1)*20).map(row=>'<tr>'+row.map(cell=>'<td>'+cell+'</td>').join('')+'</tr>').join('')}render();document.querySelector('a[title]').onclick=event=>{event.preventDefault();page++;render()};document.querySelector('a[href="#selected"]').onclick=event=>{event.preventDefault();setTimeout(()=>{document.querySelector('#yxkcGrid').style.display='block';const previous=document.querySelector('#previous');if(previous)previous.style.display='none'},120)};</script></body></html>`;
 }
+test('切换课表时等待已选课程可见，忽略旧表格及其分页', async ({ page }) => {
+  await page.setContent(schoolPage(21, true));
+  const snapshot = await readSelectedCourses(page, term);
+  expect(snapshot.complete).toBe(true);
+  expect(snapshot.total).toBe(21);
+  expect(snapshot.courses).toHaveLength(21);
+});
 test('学校 DOM 适配器遍历超过 20 条的分页并取得已认证身份', async ({ page }) => {
   await page.setContent(schoolPage(21));
   expect(await readIdentity(page)).toBe('99990000001');

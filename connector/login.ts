@@ -46,10 +46,13 @@ export async function loginAndQuery(
     if (studentNo !== username) throw new SchoolQueryError('学校返回的身份与账号不一致');
     try {
       return { studentNo, snapshot: await readSelectedCourses(page, term) };
-    } catch {
+    } catch (error) {
       return {
         studentNo,
-        queryError: '身份已验证，但课表读取失败。已有登记保持不变，请稍后重试。',
+        queryError:
+          error instanceof SchoolQueryError
+            ? `身份已验证，但${error.message}。已有登记保持不变。`
+            : '身份已验证，但课表读取失败。已有登记保持不变，请稍后重试。',
       };
     }
   });
