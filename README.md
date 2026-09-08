@@ -28,10 +28,10 @@ npm run dev:demo
 
 ```sh
 npx playwright install chromium
-npm run dev:connector
-# 另一个终端，在本次运行中开启登录入口
-UIS_ENABLED=true npm run dev
+npm run dev:uis
 ```
+
+该命令同时启动网页、API 和学校连接器，并开启本次运行的登录表单。先停止已有的 `npm run dev`，避免端口占用。普通 `npm run dev` 读取 `.env` 中的 `UIS_ENABLED`；若其值为 `false`，登录表单会显示“暂未开放”。
 
 在本站登录表单中输入 UIS 账号密码。密码仅用于当次转交学校认证，不保存。学校会话在本次采集结束时关闭；本站另外发放 7 天会话。不要在终端命令、代码、聊天或 Git 中填写学校密码。
 
