@@ -27,8 +27,9 @@ export function parseWeeks(input: string): number[] {
 export function parseSchedule(input: string): Meeting[] {
   const normalized = input.replace(/\u00a0/g, ' ').trim();
   if (!normalized || /^(待定|待排|未排课|时间待定)$/.test(normalized)) return [];
+  // A week expression starts with a number, never the preceding teacher's closing bracket.
   const pattern =
-    /([\d\s~～,，、()（）单双—–-]+)周\s*(?:星期|周)([一二三四五六日天])\s*(\d+)(?:\s*[~～—–-]\s*(\d+))?\s*节\s*([^]*?)(?=(?:[\d\s~～,，、()（）单双—–-]+)周\s*(?:星期|周)[一二三四五六日天]|$)/g;
+    /(\d[\d\s~～,，、()（）单双—–-]*)周\s*(?:星期|周)([一二三四五六日天])\s*(\d+)(?:\s*[~～—–-]\s*(\d+))?\s*节\s*([^]*?)(?=(?:\d[\d\s~～,，、()（）单双—–-]*)周\s*(?:星期|周)[一二三四五六日天]|$)/g;
   const meetings: Meeting[] = [];
   let consumed = 0;
   for (const match of normalized.matchAll(pattern)) {

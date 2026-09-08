@@ -5,6 +5,8 @@ import { ensureAccount } from '../server/accounts.js';
 import { readConfig } from '../server/config.js';
 import { createImport, previewImport, commitImport } from '../server/imports.js';
 import { listOfferings, classmates } from '../server/catalog.js';
+import { repairMissingSchedules } from '../server/repair-schedules.js';
+import { parseSchedule } from '../shared/schedule.js';
 import type { CourseInput, CourseSnapshot, Viewer } from '../shared/course.js';
 const term = '2026-2027学年 第一学期';
 const course: CourseInput = {
@@ -56,6 +58,36 @@ async function imported(user = a, courses = [course]) {
   return id;
 }
 describe('PostgreSQL 导入与权限', () => {
+  it('修复已导入的空安排，保留原文、考勤和登记人数，重复执行幂等', async () => {
+    const broken = {
+      ...course,
+      code: 'TEST60002',
+      section: '2026202701TEST60002.01',
+      meetings: [],
+      schedule:
+        '1~3(单),6~7,10,13~15周 星期三 6~8节 TEST302 TEACHER（甲）\n2~4(双),5,8~9,11~12,16周 星期三 6~8节 TEST302 乙老师',
+    };
+    const unknown = {
+      ...course,
+      code: 'TEST60003',
+      section: '2026202701TEST60003.01',
+      meetings: [],
+      schedule: '待通知的特殊安排',
+    };
+    await imported(a, [course, broken, unknown]);
+    await db.query("UPDATE offerings SET attendance='yellow' WHERE section=$1", [broken.section]);
+    const before = await listOfferings(db, term, a.id);
+    expect(await repairMissingSchedules(db)).toEqual({ repaired: 1, unresolved: 1 });
+    const after = await listOfferings(db, term, a.id);
+    expect(after).toEqual(
+      before.map((item) =>
+        item.section === broken.section
+          ? { ...item, meetings: parseSchedule(broken.schedule) }
+          : item,
+      ),
+    );
+    expect(await repairMissingSchedules(db)).toEqual({ repaired: 0, unresolved: 1 });
+  });
   it('预览不登记，确认幂等，不重复计数', async () => {
     const id = await createImport(db, a.id, snapshot());
     expect(await listOfferings(db, term)).toHaveLength(0);

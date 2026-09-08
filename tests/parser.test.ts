@@ -34,6 +34,29 @@ describe('学校课表解析', () => {
       teacher: '乙老师',
     });
   });
+  it('教师姓名的括号不混入下一段单双周，完整保留两组授课周', () => {
+    const schedule =
+      '1~3(单),6~7,10,13~15周 星期三 6~8节 TEST302 TEACHER（甲）\n2~4(双),5,8~9,11~12,16周 星期三 6~8节 TEST302 乙老师';
+    const snapshot = parseSnapshot([{ ...row, schedule }], 1, row.term);
+    expect(snapshot.complete).toBe(true);
+    expect(snapshot.issues).toEqual([]);
+    const meetings = snapshot.courses[0]!.meetings;
+    expect(meetings).toHaveLength(2);
+    expect(meetings[0]).toMatchObject({
+      weeks: [1, 3, 6, 7, 10, 13, 14, 15],
+      day: 3,
+      start: 6,
+      end: 8,
+      teacher: 'TEACHER（甲）',
+    });
+    expect(meetings[1]).toMatchObject({
+      weeks: [2, 4, 5, 8, 9, 11, 12, 16],
+      teacher: '乙老师',
+    });
+    expect([...meetings.flatMap((meeting) => meeting.weeks)].sort((a, b) => a - b)).toEqual(
+      Array.from({ length: 16 }, (_, index) => index + 1),
+    );
+  });
   it('处理星期天、单节和待定安排', () => {
     expect(parseSchedule('1周 星期天 8节 TEST')).toEqual([
       expect.objectContaining({ day: 7, start: 8, end: 8 }),

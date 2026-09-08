@@ -16,6 +16,7 @@
     "start:connector": "node dist/server/connector/main.js",
     "db:migrate": "node --env-file-if-exists=.env --import tsx server/database/migrate.ts",
     "db:backup": "bash scripts/backup.sh",
+    "db:repair-schedules": "node --env-file-if-exists=.env --import tsx scripts/repair-schedules.ts",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "dev:test": "concurrently -k -n api,web 'node --import tsx server/main.ts' 'vite --host 127.0.0.1 --port 5174'",
