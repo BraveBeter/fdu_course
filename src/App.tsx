@@ -60,6 +60,7 @@ export function App() {
   const [selected, setSelected] = useState<Offering | null>(null);
   const [group, setGroup] = useState<ConflictGroup | null>(null);
   const [loginOpen, setLoginOpen] = useState(false);
+  const [syncMode, setSyncMode] = useState(false);
   const [previewId, setPreviewId] = useState<string | null>(null);
   const [adminOpen, setAdminOpen] = useState(false);
   const [sidebar, setSidebar] = useState(false);
@@ -134,16 +135,39 @@ export function App() {
           <span className="community-label">由同学共同完善</span>
           {user?.role === 'admin' && (
             <button className="button outline" onClick={() => setAdminOpen(true)}>
-              审核管理
+              管理后台
             </button>
           )}
           {user ? (
-            <button className="button outline" onClick={() => setLoginOpen(true)}>
-              {user.nickname}
-              <ArrowUpRight size={15} />
-            </button>
+            <>
+              <button
+                className="button primary"
+                onClick={() => {
+                  setSyncMode(true);
+                  setLoginOpen(true);
+                }}
+              >
+                同步选课
+              </button>
+              <button
+                className="button outline"
+                onClick={() => {
+                  setSyncMode(false);
+                  setLoginOpen(true);
+                }}
+              >
+                {user.nickname}
+                <ArrowUpRight size={15} />
+              </button>
+            </>
           ) : (
-            <button className="button primary" onClick={() => setLoginOpen(true)}>
+            <button
+              className="button primary"
+              onClick={() => {
+                setSyncMode(false);
+                setLoginOpen(true);
+              }}
+            >
               <LogIn size={16} />
               登录 / 导入课表
             </button>
@@ -190,7 +214,13 @@ export function App() {
               disabled={!user}
             />
             {!user && (
-              <button className="login-hint" onClick={() => setLoginOpen(true)}>
+              <button
+                className="login-hint"
+                onClick={() => {
+                  setSyncMode(false);
+                  setLoginOpen(true);
+                }}
+              >
                 登录后查看个人课表 →
               </button>
             )}
@@ -356,7 +386,13 @@ export function App() {
                 </div>
                 <h2>一起填满第一张课表</h2>
                 <p>从你的已选课程开始。确认导入后，课程就会出现在这里。</p>
-                <button className="button primary" onClick={() => setLoginOpen(true)}>
+                <button
+                  className="button primary"
+                  onClick={() => {
+                    setSyncMode(false);
+                    setLoginOpen(true);
+                  }}
+                >
                   登录并导入课程
                   <ArrowUpRight size={16} />
                 </button>
@@ -432,12 +468,18 @@ export function App() {
       <Dialog
         open={loginOpen}
         onOpenChange={setLoginOpen}
-        title="登录与课程导入"
-        description="使用学校 UIS 账号验证身份，确认后导入课程。"
+        title={syncMode ? '同步学校选课' : '登录与课程导入'}
+        description={
+          syncMode
+            ? '重新查询学校已选课程，核对新增与退课后同步本站记录。'
+            : '使用学校 UIS 账号验证身份，确认后导入课程。'
+        }
       >
         <AccountPanel
           key={user?.id ?? 'guest'}
           user={user}
+          sync={syncMode}
+          term={meta?.term ?? ''}
           uisEnabled={meta?.uisEnabled ?? false}
           demo={meta?.demo ?? false}
           onUserChange={reload}
@@ -450,13 +492,15 @@ export function App() {
       <Dialog
         open={!!previewId}
         onOpenChange={(open) => !open && setPreviewId(null)}
-        title="确认导入课程"
+        title={syncMode ? '确认同步选课' : '确认导入课程'}
         description="请核对查询结果。确认前不会更改共享课程或个人登记。"
         wide
       >
         {previewId && (
           <ImportPanel
+            key={previewId}
             id={previewId}
+            sync={syncMode}
             onComplete={async () => {
               setPreviewId(null);
               await reload();
@@ -467,11 +511,12 @@ export function App() {
       <Dialog
         open={adminOpen}
         onOpenChange={setAdminOpen}
-        title="审核管理"
-        description="审核同学反馈，维护共享课程信息。"
+        title="管理后台"
+        dashboard
+        description="查看本站课程、登记人员和同步情况，处理同学反馈。"
         wide
       >
-        {adminOpen && <AdminPanel onChange={reload} />}
+        {adminOpen && <AdminPanel terms={terms} initialTerm={filters.term} onChange={reload} />}
       </Dialog>
     </div>
   );

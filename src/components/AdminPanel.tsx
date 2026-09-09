@@ -1,5 +1,7 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { api } from '../api';
+import type { AdminDashboard } from '../../shared/admin';
+import { AdminCourses, AdminStudents, dateLabel, Pager } from './AdminCatalog';
 import {
   attendanceColors,
   attendanceLabels,
@@ -7,6 +9,8 @@ import {
   type CourseInput,
 } from '../../shared/course';
 interface Report {
+  status: string;
+  created_at: string;
   id: string;
   name: string;
   section: string;
@@ -15,12 +19,18 @@ interface Report {
   note: string;
 }
 interface Change {
+  status: string;
+  reason: string;
+  created_at: string;
   id: string;
   current: CourseInput;
   proposed: CourseInput;
   nickname: string;
 }
 interface Decision {
+  id: string;
+  section: string;
+  reviewer: string;
   name: string;
   color: Attendance;
   action: string;
@@ -157,90 +167,255 @@ function ChangeReview({ change, onReviewed }: { change: Change; onReviewed: () =
     </article>
   );
 }
-export function AdminPanel({ onChange }: { onChange: () => Promise<void> }) {
+const statusLabels: Record<string, string> = {
+  pending: '待审核',
+  approved: '已采纳',
+  rejected: '已驳回',
+  superseded: '已被后续反馈替代',
+  schedule_reset: '教师变化重置',
+};
+export function AdminPanel({
+  terms,
+  initialTerm,
+  onChange,
+}: {
+  terms: string[];
+  initialTerm: string;
+  onChange: () => Promise<void>;
+}) {
+  const [term, setTerm] = useState(initialTerm || terms[0] || '');
+  const [tab, setTab] = useState('courses');
+  const [query, setQuery] = useState('');
+  const [status, setStatus] = useState('pending');
+  const [page, setPage] = useState(1);
+  const [revision, setRevision] = useState(0);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
+  const [data, setData] = useState<AdminDashboard>({ courses: [], students: [] });
   const [reports, setReports] = useState<Report[]>([]);
   const [changes, setChanges] = useState<Change[]>([]);
   const [history, setHistory] = useState<Decision[]>([]);
-  const [tab, setTab] = useState('reports');
-  const [error, setError] = useState('');
-  const load = useCallback(async () => {
-    try {
-      const [a, b, c] = await Promise.all([
-        api<{ reports: Report[] }>('/admin/reports'),
-        api<{ changes: Change[] }>('/admin/changes'),
-        api<{ decisions: Decision[] }>('/admin/history'),
-      ]);
-      setReports(a.reports);
-      setChanges(b.changes);
-      setHistory(c.decisions);
-    } catch (error) {
-      setError((error as Error).message);
-    }
-  }, []);
   useEffect(() => {
-    void load();
-  }, [load]);
+    const controller = new AbortController();
+    setLoading(true);
+    setError('');
+    const params = new URLSearchParams({ term, status });
+    void Promise.all([
+      api<AdminDashboard>(`/admin/dashboard?${params}`, { signal: controller.signal }),
+      api<{ reports: Report[] }>(`/admin/reports?${params}`, { signal: controller.signal }),
+      api<{ changes: Change[] }>(`/admin/changes?${params}`, { signal: controller.signal }),
+      api<{ decisions: Decision[] }>(`/admin/history?${params}`, { signal: controller.signal }),
+    ])
+      .then(([dashboard, a, b, c]) => {
+        if (controller.signal.aborted) return;
+        setData(dashboard);
+        setReports(a.reports);
+        setChanges(b.changes);
+        setHistory(c.decisions);
+      })
+      .catch((error) => {
+        if (!controller.signal.aborted) setError((error as Error).message);
+      })
+      .finally(() => {
+        if (!controller.signal.aborted) setLoading(false);
+      });
+    return () => controller.abort();
+  }, [term, status, revision]);
+  useEffect(() => setPage(1), [term, status, query, tab]);
   const updated = async () => {
-    await load();
+    setRevision((v) => v + 1);
     await onChange();
   };
+  const matches = (...parts: string[]) =>
+    parts.join(' ').toLowerCase().includes(query.trim().toLowerCase());
+  const filteredReports = reports.filter((r) => matches(r.name, r.section, r.nickname, r.note));
+  const filteredChanges = changes.filter((c) =>
+    matches(c.current.name, c.current.section, c.proposed.teachers, c.nickname, c.reason),
+  );
+  const filteredHistory = history.filter((d) => matches(d.name, d.section, d.reviewer, d.reason));
+  const total =
+    tab === 'reports'
+      ? filteredReports.length
+      : tab === 'changes'
+        ? filteredChanges.length
+        : filteredHistory.length;
+  const currentPage = Math.min(page, Math.max(1, Math.ceil(total / 20)));
+  const start = (currentPage - 1) * 20;
+  const pendingReports = data.courses.reduce((n, c) => n + c.pendingReports, 0);
+  const pendingChanges = data.courses.reduce((n, c) => n + c.pendingChanges, 0);
   return (
-    <>
-      <div className="admin-tabs">
-        <button className={tab === 'reports' ? 'active' : ''} onClick={() => setTab('reports')}>
-          考勤反馈 ({reports.length})
-        </button>
-        <button className={tab === 'changes' ? 'active' : ''} onClick={() => setTab('changes')}>
-          课程变更 ({changes.length})
-        </button>
-        <button className={tab === 'history' ? 'active' : ''} onClick={() => setTab('history')}>
-          审核记录
-        </button>
+    <div className="admin-dashboard">
+      <div className="admin-filters">
+        <label>
+          学期
+          <select
+            aria-label="管理学期"
+            value={term}
+            onChange={(e) => {
+              setTerm(e.target.value);
+              setQuery('');
+            }}
+          >
+            {terms.map((t) => (
+              <option key={t}>{t}</option>
+            ))}
+          </select>
+        </label>
+        <label className="admin-search">
+          搜索
+          <input
+            aria-label="管理搜索"
+            placeholder={tab === 'students' ? '昵称或本站编号' : '课程名称、教学班、教师或反馈内容'}
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+          />
+        </label>
       </div>
+      <p className="muted">人数为本站登记人数；选课和同步时间按所选学期统计。</p>
+      <div className="admin-tabs">
+        {[
+          ['courses', '课程汇总'],
+          ['students', '选课人员'],
+          ['reports', `考勤反馈 (${pendingReports})`],
+          ['changes', `课程变更 (${pendingChanges})`],
+          ['history', '审核记录'],
+        ].map(([id, label]) => (
+          <button
+            key={id}
+            className={tab === id ? 'active' : ''}
+            onClick={() => {
+              setTab(id);
+              setQuery('');
+            }}
+          >
+            {label}
+          </button>
+        ))}
+      </div>
+      {(tab === 'reports' || tab === 'changes') && (
+        <select aria-label="审核状态" value={status} onChange={(e) => setStatus(e.target.value)}>
+          <option value="pending">待审核</option>
+          <option value="all">全部状态</option>
+          <option value="approved">已采纳</option>
+          <option value="rejected">已驳回</option>
+          <option value="superseded">已替代</option>
+        </select>
+      )}
       {error && (
         <p className="inline-error" role="alert">
           {error}
         </p>
       )}
-      {tab === 'reports' &&
-        (reports.length ? (
-          reports.map((report) => (
-            <ReviewForm report={report} onReviewed={updated} key={report.id} />
-          ))
-        ) : (
-          <p className="panel-empty">暂无待审核反馈</p>
-        ))}
-      {tab === 'changes' &&
-        (changes.length ? (
-          changes.map((change) => (
-            <ChangeReview change={change} onReviewed={updated} key={change.id} />
-          ))
-        ) : (
-          <p className="panel-empty">暂无待审核课程变更</p>
-        ))}
-      {tab === 'history' &&
-        (history.length ? (
-          history.map((decision, i) => (
-            <article className="review-card" key={i}>
-              <strong>{decision.name}</strong>
-              <p className="muted">
-                {
-                  (
-                    {
-                      approved: '已采纳',
-                      rejected: '已驳回',
-                      schedule_reset: '教师变化重置',
-                    } as Record<string, string>
-                  )[decision.action]
-                }{' '}
-                · {attendanceLabels[decision.color]}
-              </p>
-              <p className="report-note">{decision.reason}</p>
-            </article>
-          ))
-        ) : (
-          <p className="panel-empty">暂无审核记录</p>
-        ))}
-    </>
+      {loading ? (
+        <p role="status" className="panel-empty">
+          正在加载管理数据…
+        </p>
+      ) : (
+        !error && (
+          <>
+            <div className="admin-stats">
+              {[
+                ['已收录课程', data.courses.length],
+                ['本学期登记人员', data.students.filter((s) => s.courseIds.length > 0).length],
+                ['选课登记总数', data.courses.reduce((n, c) => n + c.count, 0)],
+                ['待审核事项', pendingReports + pendingChanges],
+              ].map(([label, count]) => (
+                <div key={label}>
+                  <strong>{count}</strong>
+                  <span>{label}</span>
+                </div>
+              ))}
+            </div>
+            {tab === 'courses' && (
+              <AdminCourses
+                key={term}
+                courses={data.courses}
+                students={data.students}
+                query={query}
+              />
+            )}
+            {tab === 'students' && (
+              <AdminStudents
+                key={term}
+                courses={data.courses}
+                students={data.students}
+                query={query}
+              />
+            )}
+            {tab === 'reports' &&
+              (total ? (
+                filteredReports.slice(start, start + 20).map((r) =>
+                  r.status === 'pending' ? (
+                    <ReviewForm key={r.id} report={r} onReviewed={updated} />
+                  ) : (
+                    <article className="review-card" key={r.id}>
+                      <strong>{r.name}</strong>
+                      <p>
+                        {r.section} · {r.nickname} · {statusLabels[r.status]} ·{' '}
+                        {attendanceLabels[r.color]}
+                      </p>
+                      <p className="report-note">{r.note}</p>
+                      <small>{dateLabel(r.created_at)}</small>
+                    </article>
+                  ),
+                )
+              ) : (
+                <p className="panel-empty">
+                  {status === 'pending' && !query ? '暂无待审核反馈' : '没有符合条件的反馈'}
+                </p>
+              ))}
+            {tab === 'changes' &&
+              (total ? (
+                filteredChanges.slice(start, start + 20).map((c) =>
+                  c.status === 'pending' ? (
+                    <ChangeReview key={c.id} change={c} onReviewed={updated} />
+                  ) : (
+                    <article className="review-card" key={c.id}>
+                      <strong>{c.current.name}</strong>
+                      <p>
+                        {c.current.section} · {c.nickname} · {statusLabels[c.status]}
+                      </p>
+                      <div className="change-comparison">
+                        <p>
+                          现有安排：{c.current.teachers} · {c.current.schedule}
+                        </p>
+                        <p>
+                          申请安排：{c.proposed.teachers} · {c.proposed.schedule}
+                        </p>
+                      </div>
+                      <p className="report-note">{c.reason}</p>
+                      <small>{dateLabel(c.created_at)}</small>
+                    </article>
+                  ),
+                )
+              ) : (
+                <p className="panel-empty">
+                  {status === 'pending' && !query ? '暂无待审核课程变更' : '没有符合条件的课程变更'}
+                </p>
+              ))}
+            {tab === 'history' &&
+              (total ? (
+                filteredHistory.slice(start, start + 20).map((d) => (
+                  <article className="review-card" key={d.id}>
+                    <strong>{d.name}</strong>
+                    <p className="muted">
+                      {d.section} · {statusLabels[d.action]} · {attendanceLabels[d.color]}
+                    </p>
+                    <p className="report-note">{d.reason}</p>
+                    <small>
+                      {d.reviewer} · {dateLabel(d.created_at)}
+                    </small>
+                  </article>
+                ))
+              ) : (
+                <p className="panel-empty">暂无审核记录</p>
+              ))}
+            {['reports', 'changes', 'history'].includes(tab) && (
+              <Pager page={currentPage} total={total} onPage={setPage} />
+            )}
+          </>
+        )
+      )}
+    </div>
   );
 }

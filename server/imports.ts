@@ -93,6 +93,12 @@ export async function commitImport(
     const batch = await batchFor(tx, userId, id, true);
     if (batch.committed_at)
       return { imported: batch.snapshot.courses.length, removed: 0, alreadyCommitted: true };
+    const newer = await tx.query(
+      'SELECT id FROM imports WHERE user_id=$1 AND term=$2 AND committed_at IS NOT NULL AND created_at > (SELECT created_at FROM imports WHERE id=$3) LIMIT 1',
+      [userId, batch.term, id],
+    );
+    if (newer.rows.length)
+      throw new AppError(409, '已有更新的选课记录，请重新查询，旧预览不能覆盖新记录');
     if (removeMissing && !batch.snapshot.complete)
       throw new AppError(409, '课表不完整，不能取消已有登记');
     const offeringIds: string[] = [];
@@ -145,7 +151,10 @@ export async function commitImport(
       );
       removed = result.rows.length;
     }
-    await tx.query('UPDATE imports SET committed_at=now() WHERE id=$1', [id]);
+    await tx.query('UPDATE imports SET committed_at=now(),reconciled=$2 WHERE id=$1', [
+      id,
+      removeMissing && batch.snapshot.complete,
+    ]);
     return { imported: offeringIds.length, removed, alreadyCommitted: false };
   });
 }

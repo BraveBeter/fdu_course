@@ -8,6 +8,7 @@ export function Dialog({
   description,
   children,
   wide = false,
+  dashboard = false,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -15,12 +16,15 @@ export function Dialog({
   description?: string;
   children: ReactNode;
   wide?: boolean;
+  dashboard?: boolean;
 }) {
   return (
     <Primitive.Root open={open} onOpenChange={onOpenChange}>
       <Primitive.Portal>
         <Primitive.Overlay className="dialog-overlay" />
-        <Primitive.Content className={`dialog-content ${wide ? 'dialog-wide' : ''}`}>
+        <Primitive.Content
+          className={`dialog-content ${wide ? 'dialog-wide' : ''} ${dashboard ? 'dialog-dashboard' : ''}`}
+        >
           <div className="dialog-heading">
             <div>
               <Primitive.Title>{title}</Primitive.Title>

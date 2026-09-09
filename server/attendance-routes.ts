@@ -8,6 +8,10 @@ export function attendanceRoutes(
   db: Database,
   viewer: (request: FastifyRequest) => Promise<Viewer>,
 ) {
+  const filters = z.object({
+    term: z.string().min(1).max(80).optional(),
+    status: z.enum(['all', 'pending', 'approved', 'rejected', 'superseded']).default('pending'),
+  });
   app.post('/api/offerings/:id/reports', async (request) => {
     const user = await viewer(request);
     const { id } = z.object({ id: z.uuid() }).parse(request.params);
@@ -29,30 +33,36 @@ export function attendanceRoutes(
   });
   app.get('/api/admin/reports', async (request) => {
     requireAdmin(await viewer(request));
+    const { term, status } = filters.parse(request.query);
     return {
       reports: (
         await db.query(
-          "SELECT r.id,r.color,r.note,r.status,r.created_at,o.payload->>'name' AS name,o.attendance,o.section,u.nickname FROM reports r JOIN offerings o ON o.id=r.offering_id JOIN users u ON u.id=r.user_id WHERE r.status='pending' ORDER BY r.created_at LIMIT 200",
+          "SELECT r.id,r.color,r.note,r.status,r.created_at,o.payload->>'name' AS name,o.attendance,o.section,u.nickname FROM reports r JOIN offerings o ON o.id=r.offering_id JOIN users u ON u.id=r.user_id WHERE ($1::text IS NULL OR o.term=$1) AND ($2='all' OR r.status=$2) ORDER BY r.created_at DESC,r.id",
+          [term ?? null, status],
         )
       ).rows,
     };
   });
   app.get('/api/admin/changes', async (request) => {
     requireAdmin(await viewer(request));
+    const { term, status } = filters.parse(request.query);
     return {
       changes: (
         await db.query(
-          "SELECT c.id,c.proposed,o.payload AS current,u.nickname FROM course_changes c JOIN offerings o ON o.id=c.offering_id JOIN users u ON u.id=c.user_id WHERE c.status='pending' ORDER BY c.created_at LIMIT 200",
+          "SELECT c.id,c.proposed,c.status,c.reason,c.created_at,o.payload AS current,u.nickname FROM course_changes c JOIN offerings o ON o.id=c.offering_id JOIN users u ON u.id=c.user_id WHERE ($1::text IS NULL OR o.term=$1) AND ($2='all' OR c.status=$2) ORDER BY c.created_at DESC,c.id",
+          [term ?? null, status],
         )
       ).rows,
     };
   });
   app.get('/api/admin/history', async (request) => {
     requireAdmin(await viewer(request));
+    const { term } = filters.parse(request.query);
     return {
       decisions: (
         await db.query(
-          "SELECT d.color,d.action,d.reason,d.created_at,o.payload->>'name' AS name FROM decisions d JOIN offerings o ON o.id=d.offering_id ORDER BY d.created_at DESC LIMIT 100",
+          "SELECT d.id,d.color,d.action,d.reason,d.created_at,o.payload->>'name' AS name,o.section,u.nickname AS reviewer FROM decisions d JOIN offerings o ON o.id=d.offering_id JOIN users u ON u.id=d.admin_id WHERE ($1::text IS NULL OR o.term=$1) ORDER BY d.created_at DESC,d.id",
+          [term ?? null],
         )
       ).rows,
     };

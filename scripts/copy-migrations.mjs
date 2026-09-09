@@ -1,3 +1,6 @@
-import { mkdir, copyFile } from 'node:fs/promises';
+import { mkdir, copyFile, readdir } from 'node:fs/promises';
 await mkdir('dist/server/server/database', { recursive: true });
-await copyFile('server/database/001_initial.sql', 'dist/server/server/database/001_initial.sql');
+for (const file of await readdir('server/database')) {
+  if (file.endsWith('.sql'))
+    await copyFile(`server/database/${file}`, `dist/server/server/database/${file}`);
+}

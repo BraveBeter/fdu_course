@@ -40,7 +40,8 @@ test('学生登录、导入幂等、反馈提交、管理员审核更新颜色',
   await page.getByRole('button', { name: '演示同学', exact: true }).click();
   await page.getByRole('button', { name: '演示管理员登录', exact: true }).click();
   await page.getByRole('button', { name: '关闭', exact: true }).click();
-  await page.getByRole('button', { name: '审核管理', exact: true }).click();
+  await page.getByRole('button', { name: '管理后台', exact: true }).click();
+  await page.getByRole('button', { name: /^考勤反馈/ }).click();
   await page.getByLabel('处理说明 机器学习 · 演示').fill('已核实，采纳反馈');
   await page.getByRole('button', { name: '采纳并更新颜色' }).click();
   await expect(page.getByText('暂无待审核反馈')).toBeVisible();
@@ -60,4 +61,59 @@ test('手机按日展示且页面没有横向溢出', async ({ page }) => {
   await expect(page.locator('.day-list .list-course')).toHaveCount(1);
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
   await page.screenshot({ path: 'output/playwright/mobile.png', fullPage: true });
+});
+test('同步入口明确确认整份选课，并显示最近完整同步时间', async ({ page }) => {
+  await page.goto('/');
+  await page.getByRole('button', { name: '登录 / 导入课表' }).click();
+  await page.getByRole('button', { name: '演示同学登录', exact: true }).click();
+  await page.getByRole('button', { name: '关闭', exact: true }).click();
+  await page.getByRole('button', { name: '同步选课', exact: true }).click();
+  await expect(
+    page.getByRole('heading', { name: '同步学校选课', exact: true }).first(),
+  ).toBeVisible();
+  await page.getByRole('button', { name: '预览合成课程导入' }).click();
+  await expect(page.getByRole('heading', { name: '确认同步选课' })).toBeVisible();
+  await expect(page.getByText(/已退课程会取消登记/)).toBeVisible();
+  const commit = page.waitForRequest((r) => r.url().endsWith('/commit') && r.method() === 'POST');
+  await page.getByRole('button', { name: '确认同步选课', exact: true }).click();
+  expect((await commit).postDataJSON()).toEqual({ removeMissing: true });
+  await expect(page.getByRole('dialog')).toHaveCount(0);
+  await page.getByRole('button', { name: '同步选课', exact: true }).click();
+  await expect(page.getByText(/最近完整同步：/)).not.toContainText('尚未完成');
+  await page.screenshot({ path: 'output/playwright/sync.png' });
+});
+test('管理后台复合筛选、课程名单、学生课表和手机布局', async ({ page }) => {
+  await page.setViewportSize({ width: 1440, height: 1000 });
+  await page.goto('/');
+  await page.getByRole('button', { name: '登录 / 导入课表' }).click();
+  await page.getByRole('button', { name: '演示管理员登录', exact: true }).click();
+  await expect(page.getByLabel('同班显示昵称')).toHaveValue('演示管理员');
+  await page.getByRole('button', { name: '关闭', exact: true }).click();
+  await page.getByRole('button', { name: '管理后台', exact: true }).click();
+  await expect(page.locator('.admin-table tbody tr')).toHaveCount(12);
+  await page.screenshot({ path: 'output/playwright/admin-desktop.png' });
+  await page.getByLabel('管理搜索', { exact: true }).fill('机器学习');
+  await page.getByLabel('管理课程考勤', { exact: true }).selectOption('red');
+  await expect(page.locator('.admin-table tbody tr')).toHaveCount(1);
+  await page.getByLabel('管理课程类别', { exact: true }).selectOption('第一外国语');
+  await expect(page.getByText('没有符合条件的课程')).toBeVisible();
+  await page.getByLabel('管理课程类别', { exact: true }).selectOption('');
+  await page.getByRole('button', { name: '机器学习 · 演示', exact: true }).click();
+  await expect(page.getByRole('heading', { name: '本课程登记人员 (2)' })).toBeVisible();
+  await page.getByLabel('筛选本课程人员').fill('演示同学');
+  await expect(page.locator('.admin-roster article')).toHaveCount(1);
+  await page.getByRole('button', { name: '选课人员', exact: true }).click();
+  await page.getByLabel('管理搜索', { exact: true }).fill('演示同学');
+  await expect(page.locator('.admin-table tbody tr')).toHaveCount(1);
+  await page.getByRole('button', { name: '演示同学', exact: true }).last().click();
+  await expect(page.locator('.admin-course-facts')).toHaveCount(13);
+  await page.getByRole('button', { name: '课程汇总', exact: true }).click();
+  await page.setViewportSize({ width: 390, height: 844 });
+  await expect(page.getByRole('dialog')).toBeVisible();
+  expect(await page.getByRole('dialog').evaluate((el) => el.scrollWidth <= el.clientWidth)).toBe(
+    true,
+  );
+  await page.screenshot({ path: 'output/playwright/admin-mobile.png' });
+  await page.getByRole('button', { name: '关闭', exact: true }).click();
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
 });

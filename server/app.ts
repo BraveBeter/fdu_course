@@ -1,4 +1,5 @@
 import { attendanceRoutes } from './attendance-routes.js';
+import { adminRoutes } from './admin-routes.js';
 import { demoStudent, demoAdmin, demoConfig, demoSnapshot } from './demo.js';
 import Fastify, { type FastifyRequest } from 'fastify';
 import cookie from '@fastify/cookie';
@@ -179,6 +180,7 @@ export async function buildApp(
     return { ok: true };
   });
   attendanceRoutes(app, db, viewer);
+  adminRoutes(app, db, viewer);
   if (config.DEMO_MODE === 'true' && config.NODE_ENV !== 'production') {
     app.post('/api/auth/demo', async (request, reply) => {
       const { role } = z.object({ role: z.enum(['student', 'admin']) }).parse(request.body);

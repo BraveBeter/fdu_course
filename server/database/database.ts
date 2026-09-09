@@ -48,20 +48,25 @@ export async function openDatabase(url: string): Promise<Database> {
 }
 
 export async function migrate(db: Database): Promise<void> {
-  const migration = await readFile(new URL('./001_initial.sql', import.meta.url), 'utf8');
+  const files = ['001_initial.sql', '002_sync.sql'];
   await db.transaction(async (tx) => {
     await tx.query(
       'CREATE TABLE IF NOT EXISTS schema_migrations (version integer PRIMARY KEY, applied_at timestamptz DEFAULT now())',
     );
     await tx.query('LOCK TABLE schema_migrations IN EXCLUSIVE MODE');
-    const existing = await tx.query('SELECT version FROM schema_migrations WHERE version=1');
-    if (!existing.rows.length) {
+    for (const [index, file] of files.entries()) {
+      const version = index + 1;
+      const existing = await tx.query('SELECT version FROM schema_migrations WHERE version=$1', [
+        version,
+      ]);
+      if (existing.rows.length) continue;
+      const migration = await readFile(new URL(file, import.meta.url), 'utf8');
       for (const statement of migration
         .split(';')
         .map((value) => value.trim())
         .filter(Boolean))
         await tx.query(statement);
-      await tx.query('INSERT INTO schema_migrations(version) VALUES(1)');
+      await tx.query('INSERT INTO schema_migrations(version) VALUES($1)', [version]);
     }
   });
 }
