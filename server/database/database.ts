@@ -48,7 +48,7 @@ export async function openDatabase(url: string): Promise<Database> {
 }
 
 export async function migrate(db: Database): Promise<void> {
-  const files = ['001_initial.sql', '002_sync.sql'];
+  const files = ['001_initial.sql', '002_sync.sql', '003_local_admin.sql'];
   await db.transaction(async (tx) => {
     await tx.query(
       'CREATE TABLE IF NOT EXISTS schema_migrations (version integer PRIMARY KEY, applied_at timestamptz DEFAULT now())',

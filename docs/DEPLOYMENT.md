@@ -16,7 +16,7 @@
 | `POSTGRES_PASSWORD` | 新生成的随机数据库密码                                         |
 | `IDENTITY_SECRET`   | 新生成的至少 32 字符密钥；长期保留，改变会影响学校身份映射     |
 | `CONNECTOR_SECRET`  | 独立生成的至少 32 字符连接器密钥                               |
-| `ADMIN_UIS_IDS`     | 管理员的 UIS 学号，多个用逗号分隔                              |
+| `ADMIN_UIS_IDS`     | 可选的 UIS 管理员学号，独立管理员账号不需要配置                |
 | `CURRENT_TERM`      | 学校页面中的学期名称，例如 `2026-2027学年 第一学期`            |
 | `UIS_ENABLED`       | 首先设 `false`；完成目标服务器真实认证、身份和课表核对后再开放 |
 
@@ -31,6 +31,25 @@ docker compose ps
 Caddy 自动获取证书。应用启动时使用事务执行尚未应用的迁移。`/api/health` 检查 API 与数据库；连接器健康检查确认服务进程可用，不能替代学校认证联调。
 
 生产环境不提供演示登录入口；配置层拒绝开启演示模式、开发身份密钥、PGlite 或非 HTTPS 公网地址。
+
+## 独立管理员账号
+
+管理员无需学号。应用启动后，在交互式终端创建账号：
+
+```sh
+docker compose exec app node dist/server/server/admin-cli.js create
+```
+
+输入用户名、显示名称和至少 15 个字符的密码，密码不回显。通过网站右上角“管理员登录”或 `/admin` 登录；无需开启 UIS，也无需运行学校连接器来认证管理员。没有默认管理员密码或公开注册接口。
+
+重置密码或停用账号：
+
+```sh
+docker compose exec app node dist/server/server/admin-cli.js reset-password
+docker compose exec app node dist/server/server/admin-cli.js disable
+```
+
+重置和停用立即撤销旧会话；重置不会恢复停用账号。PostgreSQL 可在应用运行时执行这些命令，本地 PGlite 必须先停止开发服务。禁止通过命令行参数传入密码。数据库备份现包含管理员密码派生结果，需要按凭据数据保管。
 
 ## 备份和恢复
 
@@ -60,7 +79,7 @@ docker compose exec -T db pg_restore -U fdu_course -d fdu_course_restore \
 - 首次试用至少核对两个账号、同一教学班的重复导入、分页、单双周、取消登记和审核权限。
 - 学校查询失败不清空已有课程；保持用户最近确认的数据。UIS 临时不可用时，已有本站会话仍可使用。
 - 更新前备份，拉取已通过 CI 的提交，重新构建并启动。数据库结构变化需审查迁移与回滚方案，不直接回滚到不兼容旧代码。
-- 管理员白名单通过服务器配置管理；修改后需要对应用户重新认证，以刷新角色。
+- 独立管理员通过上述终端命令管理；UIS 管理员白名单仍由服务器配置管理，修改后需要对应用户重新认证以刷新角色。
 
 ## 当前验证边界
 

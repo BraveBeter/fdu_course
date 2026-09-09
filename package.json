@@ -19,9 +19,12 @@
     "db:repair-schedules": "node --env-file-if-exists=.env --import tsx scripts/repair-schedules.ts",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
-    "dev:test": "concurrently -k -n api,web 'node --import tsx server/main.ts' 'vite --host 127.0.0.1 --port 5174'",
+    "dev:test": "concurrently -k -n api,web 'node --import tsx tests/support/e2e-server.ts' 'vite --host 127.0.0.1 --port 5174'",
     "setup:local": "node scripts/setup-local.mjs",
-    "dev:demo": "concurrently -k -n api,web 'node --import tsx scripts/demo-server.ts' 'vite --host 127.0.0.1'"
+    "dev:demo": "concurrently -k -n api,web 'node --import tsx scripts/demo-server.ts' 'vite --host 127.0.0.1'",
+    "admin:create": "node --env-file-if-exists=.env --import tsx server/admin-cli.ts create",
+    "admin:reset-password": "node --env-file-if-exists=.env --import tsx server/admin-cli.ts reset-password",
+    "admin:disable": "node --env-file-if-exists=.env --import tsx server/admin-cli.ts disable"
   },
   "engines": {
     "node": ">=22.12.0"

@@ -64,6 +64,7 @@ export interface Viewer {
   id: string;
   nickname: string;
   role: 'student' | 'admin';
+  authProvider: 'uis' | 'local';
 }
 export interface Filters {
   term: string;

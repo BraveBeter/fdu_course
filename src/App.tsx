@@ -1,6 +1,7 @@
 import { AccountPanel } from './components/AccountPanel';
 import { ImportPanel } from './components/ImportPanel';
 import { CourseDetail } from './components/CourseDetail';
+import { AdminLogin } from './components/AdminLogin';
 import { AdminPanel } from './components/AdminPanel';
 import { useCallback, useEffect, useState } from 'react';
 import {
@@ -63,7 +64,14 @@ export function App() {
   const [syncMode, setSyncMode] = useState(false);
   const [previewId, setPreviewId] = useState<string | null>(null);
   const [adminOpen, setAdminOpen] = useState(false);
+  const [adminLoginOpen, setAdminLoginOpen] = useState(window.location.pathname === '/admin');
   const [sidebar, setSidebar] = useState(false);
+  useEffect(() => {
+    if (adminLoginOpen && user?.role === 'admin') {
+      setAdminLoginOpen(false);
+      setAdminOpen(true);
+    }
+  }, [adminLoginOpen, user?.role]);
   const reload = useCallback(async () => {
     try {
       const [{ user }, metadata, { terms }] = await Promise.all([
@@ -133,6 +141,11 @@ export function App() {
         </a>
         <div className="header-right">
           <span className="community-label">由同学共同完善</span>
+          {user?.role !== 'admin' && (
+            <button className="button outline" onClick={() => setAdminLoginOpen(true)}>
+              管理员登录
+            </button>
+          )}
           {user?.role === 'admin' && (
             <button className="button outline" onClick={() => setAdminOpen(true)}>
               管理后台
@@ -140,15 +153,17 @@ export function App() {
           )}
           {user ? (
             <>
-              <button
-                className="button primary"
-                onClick={() => {
-                  setSyncMode(true);
-                  setLoginOpen(true);
-                }}
-              >
-                同步选课
-              </button>
+              {user.authProvider === 'uis' && (
+                <button
+                  className="button primary"
+                  onClick={() => {
+                    setSyncMode(true);
+                    setLoginOpen(true);
+                  }}
+                >
+                  同步选课
+                </button>
+              )}
               <button
                 className="button outline"
                 onClick={() => {
@@ -468,11 +483,19 @@ export function App() {
       <Dialog
         open={loginOpen}
         onOpenChange={setLoginOpen}
-        title={syncMode ? '同步学校选课' : '登录与课程导入'}
+        title={
+          user?.authProvider === 'local'
+            ? '管理员账号'
+            : syncMode
+              ? '同步学校选课'
+              : '登录与课程导入'
+        }
         description={
-          syncMode
-            ? '重新查询学校已选课程，核对新增与退课后同步本站记录。'
-            : '使用学校 UIS 账号验证身份，确认后导入课程。'
+          user?.authProvider === 'local'
+            ? '管理本站显示名称与登录状态。'
+            : syncMode
+              ? '重新查询学校已选课程，核对新增与退课后同步本站记录。'
+              : '使用学校 UIS 账号验证身份，确认后导入课程。'
         }
       >
         <AccountPanel
@@ -507,6 +530,20 @@ export function App() {
             }}
           />
         )}
+      </Dialog>
+      <Dialog
+        open={adminLoginOpen}
+        onOpenChange={setAdminLoginOpen}
+        title="管理员登录"
+        description="使用独立管理员账号进入管理后台。"
+      >
+        <AdminLogin
+          onComplete={async () => {
+            await reload();
+            setAdminLoginOpen(false);
+            setAdminOpen(true);
+          }}
+        />
       </Dialog>
       <Dialog
         open={adminOpen}

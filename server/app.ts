@@ -1,4 +1,5 @@
 import { attendanceRoutes } from './attendance-routes.js';
+import { loginAdmin, adminUsername } from './admin-accounts.js';
 import { adminRoutes } from './admin-routes.js';
 import { demoStudent, demoAdmin, demoConfig, demoSnapshot } from './demo.js';
 import Fastify, { type FastifyRequest } from 'fastify';
@@ -106,6 +107,32 @@ export async function buildApp(
     await db.query('UPDATE users SET nickname=$2 WHERE id=$1', [user.id, nickname]);
     return { user: { ...user, nickname } };
   });
+  let activeAdminLogins = 0;
+  app.post(
+    '/api/auth/admin/login',
+    { config: { rateLimit: { max: 5, timeWindow: 60000 } } },
+    async (request, reply) => {
+      const { username, password } = z
+        .object({ username: adminUsername, password: z.string().min(1).max(256) })
+        .parse(request.body);
+      if (activeAdminLogins >= 2) throw new AppError(429, '登录繁忙，请稍后重试');
+      activeAdminLogins++;
+      try {
+        const result = await loginAdmin(db, username, password);
+        if (request.cookies.session)
+          await db.query('DELETE FROM sessions WHERE token_hash=$1', [
+            tokenHash(request.cookies.session),
+          ]);
+        jobs.revoke(request.cookies.auth_flow ?? '');
+        reply
+          .clearCookie('auth_flow', cookieOptions)
+          .setCookie('session', result.session, { ...cookieOptions, maxAge: 604800 });
+        return { user: result.user };
+      } finally {
+        activeAdminLogins--;
+      }
+    },
+  );
   app.post(
     '/api/auth/login',
     { config: { rateLimit: { max: 5, timeWindow: 60000 } } },
@@ -117,6 +144,8 @@ export async function buildApp(
         .parse(request.body);
       const owner = request.cookies.auth_flow ?? randomBytes(32).toString('hex');
       const current = await getViewer(db, request.cookies.session);
+      if (current?.authProvider === 'local')
+        throw new AppError(403, '本站管理员账号不能同步学校课表，请退出后使用 UIS 登录');
       const id = jobs.start(owner, username, password, current?.id);
       reply.setCookie('auth_flow', owner, { ...cookieOptions, maxAge: 300 });
       return { id };

@@ -170,55 +170,57 @@ export function AccountPanel({
           </button>
         </section>
       )}
-      <form onSubmit={login} className="stack-form">
-        <h3>{sync ? '同步学校选课' : user ? '重新查询学校课表' : 'UIS 账号登录'}</h3>
-        {user && (
-          <p className="muted">
-            同步学期：{term}
-            <br />
-            {syncStatus?.lastSyncedAt
-              ? `最近完整同步：${new Date(syncStatus.lastSyncedAt).toLocaleString('zh-CN')}`
-              : '尚未完成整份选课同步'}
-            {sync && (
-              <>
-                <br />
-                学校选课发生变化后，请再次同步。密码不保存，因此每次查询需要重新输入。
-              </>
-            )}
+      {user?.authProvider !== 'local' && (
+        <form onSubmit={login} className="stack-form">
+          <h3>{sync ? '同步学校选课' : user ? '重新查询学校课表' : 'UIS 账号登录'}</h3>
+          {user && (
+            <p className="muted">
+              同步学期：{term}
+              <br />
+              {syncStatus?.lastSyncedAt
+                ? `最近完整同步：${new Date(syncStatus.lastSyncedAt).toLocaleString('zh-CN')}`
+                : '尚未完成整份选课同步'}
+              {sync && (
+                <>
+                  <br />
+                  学校选课发生变化后，请再次同步。密码不保存，因此每次查询需要重新输入。
+                </>
+              )}
+            </p>
+          )}
+          <p className="form-explanation">
+            账号密码经本站服务器用于学校验证，密码不保存。查询可能使原来的学校选课会话退出。
           </p>
-        )}
-        <p className="form-explanation">
-          账号密码经本站服务器用于学校验证，密码不保存。查询可能使原来的学校选课会话退出。
-        </p>
-        {!uisEnabled && <p className="notice">自动登录尚在验证，暂未开放。已有课表仍可浏览。</p>}
-        <label htmlFor="uis-username">学号</label>
-        <input
-          id="uis-username"
-          name="username"
-          autoComplete="username"
-          inputMode="numeric"
-          value={username}
-          onChange={(e) => setUsername(e.target.value)}
-          pattern="[0-9]{8,15}"
-          required
-          disabled={!uisEnabled || busy}
-        />
-        <label htmlFor="uis-password">UIS 密码</label>
-        <input
-          id="uis-password"
-          name="password"
-          type="password"
-          autoComplete="current-password"
-          value={password}
-          onChange={(e) => setPassword(e.target.value)}
-          required
-          disabled={!uisEnabled || busy}
-        />
-        <button className="button primary" disabled={!uisEnabled || busy}>
-          {busy ? <LoaderCircle size={16} className="spin" /> : <ArrowDownToLine size={16} />}
-          {sync ? '查询学校选课变化' : '验证并预览课程'}
-        </button>
-      </form>
+          {!uisEnabled && <p className="notice">自动登录尚在验证，暂未开放。已有课表仍可浏览。</p>}
+          <label htmlFor="uis-username">学号</label>
+          <input
+            id="uis-username"
+            name="username"
+            autoComplete="username"
+            inputMode="numeric"
+            value={username}
+            onChange={(e) => setUsername(e.target.value)}
+            pattern="[0-9]{8,15}"
+            required
+            disabled={!uisEnabled || busy}
+          />
+          <label htmlFor="uis-password">UIS 密码</label>
+          <input
+            id="uis-password"
+            name="password"
+            type="password"
+            autoComplete="current-password"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            required
+            disabled={!uisEnabled || busy}
+          />
+          <button className="button primary" disabled={!uisEnabled || busy}>
+            {busy ? <LoaderCircle size={16} className="spin" /> : <ArrowDownToLine size={16} />}
+            {sync ? '查询学校选课变化' : '验证并预览课程'}
+          </button>
+        </form>
+      )}
       {message && (
         <p className="form-message" role="status">
           {message}
